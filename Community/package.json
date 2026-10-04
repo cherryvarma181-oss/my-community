@@ -1,0 +1,16 @@
+{
+  "name": "apsmart-bus-route-intelligence",
+  "version": "1.0.0",
+  "description": "APSMART – Bus Route Intelligence: From Passenger Data to Smarter Bus Routes",
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "db:setup": "npm --prefix server run db:push && npm --prefix server run db:seed",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "build": "npm --prefix server run build && npm --prefix client run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

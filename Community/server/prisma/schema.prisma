@@ -1,0 +1,226 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   // PASSENGER, FIELD_SURVEYOR, TRANSPORT_ADMIN
+  createdAt DateTime @default(now())
+
+  surveys     Survey[]
+  savedRoutes SavedRoute[]
+  feedbacks   PassengerFeedback[]
+}
+
+model Route {
+  id               String   @id @default(uuid())
+  routeNumber      String   @unique
+  name             String
+  origin           String
+  destination      String
+  distanceKm       Float
+  totalStops       Int
+  status           String   @default("ACTIVE") // ACTIVE, DELAYED, MODIFIED
+  frequencyMins    Int      @default(15)
+  busCount         Int      @default(4)
+  peakDemandLevel  String   @default("HIGH")   // HIGH, MEDIUM, LOW
+  createdAt        DateTime @default(now())
+
+  routeStops      RouteStop[]
+  buses           Bus[]
+  surveys         Survey[]
+  utilisations    RouteUtilisation[]
+  alerts          Alert[]
+  savedRoutes     SavedRoute[]
+  feedbacks       PassengerFeedback[]
+}
+
+model Stop {
+  id            String   @id @default(uuid())
+  code          String   @unique
+  name          String
+  area          String
+  lat           Float
+  lng           Float
+  shelter       Boolean  @default(true)
+  accessibility Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  routeStops        RouteStop[]
+  boardingRecords   PassengerRecord[] @relation("BoardingStop")
+  alightingRecords  PassengerRecord[] @relation("AlightingStop")
+  underServedAreas  UnderServedArea[]
+  feedbacks         PassengerFeedback[]
+}
+
+model RouteStop {
+  id                     String @id @default(uuid())
+  routeId                String
+  stopId                 String
+  sequenceOrder          Int
+  distanceToNextKm       Float  @default(1.2)
+  estimatedTravelTimeMins Int    @default(4)
+
+  route Route @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  stop  Stop  @relation(fields: [stopId], references: [id], onDelete: Cascade)
+
+  @@unique([routeId, sequenceOrder])
+}
+
+model Bus {
+  id              String   @id @default(uuid())
+  busNumber       String   @unique // e.g. AP 31 Z 1234
+  busType         String   // ORDINARY, METRO_EXPRESS, METRO_DELUXE, PALLE_VELUGU
+  capacity        Int      @default(55)
+  status          String   @default("ACTIVE") // ACTIVE, MAINTENANCE
+  currentRouteId  String?
+  lat             Float    @default(17.7386)
+  lng             Float    @default(83.3160)
+  speed           Float    @default(28.5)
+  occupancyStatus String   @default("MEDIUM") // LOW, MEDIUM, HIGH, FULL
+  delayMinutes    Int      @default(0)
+  nextStopId      String?
+  createdAt       DateTime @default(now())
+
+  currentRoute Route?   @relation(fields: [currentRouteId], references: [id], onDelete: SetNull)
+  surveys      Survey[]
+  alerts       Alert[]
+  feedbacks    PassengerFeedback[]
+}
+
+model Survey {
+  id          String   @id @default(uuid())
+  surveyorId  String
+  routeId     String
+  busId       String?
+  busType     String
+  direction   String   @default("UP") // UP, DOWN
+  surveyDate  String
+  surveyTime  String
+  status      String   @default("COMPLETED")
+  createdAt   DateTime @default(now())
+
+  surveyor User              @relation(fields: [surveyorId], references: [id], onDelete: Cascade)
+  route    Route             @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  bus      Bus?              @relation(fields: [busId], references: [id], onDelete: SetNull)
+  records  PassengerRecord[]
+}
+
+model PassengerRecord {
+  id             String   @id @default(uuid())
+  surveyId       String
+  boardingStopId String
+  alightingStopId String
+  passengerCount Int
+  category       String   @default("GENERAL") // GENERAL, STUDENT, SENIOR_CITIZEN, WOMEN_CHILD
+  lat            Float?
+  lng            Float?
+  timestamp      DateTime @default(now())
+
+  survey       Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  boardingStop Stop   @relation("BoardingStop", fields: [boardingStopId], references: [id])
+  alightingStop Stop  @relation("AlightingStop", fields: [alightingStopId], references: [id])
+}
+
+model RouteUtilisation {
+  id                         String   @id @default(uuid())
+  routeId                    String
+  totalPassengers            Int
+  avgPassengersPerTrip       Float
+  peakPassengers             Int
+  avgOccupancyPercent        Float
+  peakHourUtilisationPercent Float
+  lowDemandSections          String
+  highDemandSections         String
+  passengerDemandPerKm       Float
+  utilisationScore           Float
+  demandCategory             String   // HIGH, MEDIUM, LOW
+  updatedAt                  DateTime @updatedAt
+
+  route Route @relation(fields: [routeId], references: [id], onDelete: Cascade)
+}
+
+model UnderServedArea {
+  id                    String   @id @default(uuid())
+  areaName              String
+  lat                   Float
+  lng                   Float
+  demandLevel           String   // HIGH, MEDIUM, CRITICAL
+  nearestStopId         String?
+  distanceToStopKm      Float
+  availableBusesCount   Int
+  avgBusFrequencyMins   Int
+  peakDemandPaxHr       Int
+  availableCapacityPaxHr Int
+  unmetDemandPaxHr      Int
+  classificationReason  String
+  priorityScore         Float
+  createdAt             DateTime @default(now())
+
+  nearestStop Stop? @relation(fields: [nearestStopId], references: [id], onDelete: SetNull)
+}
+
+model Recommendation {
+  id                 String   @id @default(uuid())
+  targetAreaOrRoute  String
+  title              String
+  recommendationType String   // INCREASE_FREQUENCY, ADD_NEW_STOP, EXTEND_ROUTE, FEEDER_ROUTE, MODIFY_ALIGNMENT, PEAK_HOUR_BUSES, REDUCE_LOW_DEMAND_SERVICE
+  details            String
+  reason             String
+  expectedImpact     String
+  confidencePercent  Float
+  dataDaysCount      Int      @default(14)
+  status             String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  priority           String   @default("HIGH") // HIGH, MEDIUM, LOW
+  createdAt          DateTime @default(now())
+}
+
+model Alert {
+  id        String   @id @default(uuid())
+  routeId   String?
+  busId     String?
+  alertType String   // BUS_APPROACHING, DELAYED, ROUTE_CHANGED, STOP_SKIPPED, ALTERNATIVE_AVAILABLE
+  message   String
+  status    String   @default("ACTIVE")
+  timestamp DateTime @default(now())
+
+  route Route? @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  bus   Bus?   @relation(fields: [busId], references: [id], onDelete: SetNull)
+}
+
+model SavedRoute {
+  id        String   @id @default(uuid())
+  userId    String
+  routeId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  route Route @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, routeId])
+}
+
+model PassengerFeedback {
+  id           String   @id @default(uuid())
+  userId       String?
+  busId        String?
+  routeId      String?
+  stopId       String?
+  feedbackType String   // OVERCROWDING, DELAY, DRIVER_BEHAVIOR, SKIPPED_STOP, OTHER
+  comments     String
+  rating       Int      @default(3)
+  createdAt    DateTime @default(now())
+
+  user  User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  bus   Bus?   @relation(fields: [busId], references: [id], onDelete: SetNull)
+  route Route? @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  stop  Stop?  @relation(fields: [stopId], references: [id], onDelete: SetNull)
+}
